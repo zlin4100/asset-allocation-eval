@@ -1,0 +1,61 @@
+"""Compare two strategies and produce summary statistics."""
+
+import numpy as np
+import pandas as pd
+
+
+def compare_pair(
+    metrics_a: pd.DataFrame,
+    metrics_b: pd.DataFrame,
+    label_a: str,
+    label_b: str,
+) -> pd.DataFrame:
+    """
+    Merge metrics for two strategies on (client_id, period) and compute deltas.
+    Returns detail DataFrame with per-client comparison.
+    """
+    merged = metrics_a.merge(
+        metrics_b,
+        on=["client_id", "period"],
+        suffixes=(f"_{label_a}", f"_{label_b}"),
+    )
+
+    ra, rb = f"annualized_return_{label_a}", f"annualized_return_{label_b}"
+    va, vb = f"annualized_vol_{label_a}", f"annualized_vol_{label_b}"
+    sa, sb = f"sharpe_ratio_{label_a}", f"sharpe_ratio_{label_b}"
+
+    merged["delta_return"] = merged[ra] - merged[rb]
+    merged["delta_vol"] = merged[va] - merged[vb]
+    merged["delta_sharpe"] = merged[sa] - merged[sb]
+    merged["delta_sigma"] = merged[va] - merged[vb]  # same as delta_vol
+    merged["abs_delta_sigma"] = merged["delta_sigma"].abs()
+
+    return merged
+
+
+def summarize(detail: pd.DataFrame, label_a: str, label_b: str) -> pd.DataFrame:
+    """Produce summary stats grouped by period."""
+    ra, rb = f"annualized_return_{label_a}", f"annualized_return_{label_b}"
+    va, vb = f"annualized_vol_{label_a}", f"annualized_vol_{label_b}"
+    sa, sb = f"sharpe_ratio_{label_a}", f"sharpe_ratio_{label_b}"
+
+    rows = []
+    for period, grp in detail.groupby("period"):
+        n = len(grp)
+        row = {
+            "period": period,
+            "n_clients": n,
+            f"mean_return_{label_a}": grp[ra].mean(),
+            f"mean_return_{label_b}": grp[rb].mean(),
+            f"mean_vol_{label_a}": grp[va].mean(),
+            f"mean_vol_{label_b}": grp[vb].mean(),
+            f"mean_sharpe_{label_a}": grp[sa].mean(),
+            f"mean_sharpe_{label_b}": grp[sb].mean(),
+            "mean_abs_delta_sigma": grp["abs_delta_sigma"].mean(),
+            "win_rate_return": (grp["delta_return"] > 0).mean(),
+            "win_rate_sharpe": (grp["delta_sharpe"] > 0).mean(),
+            "win_rate_abs_delta_sigma": (grp[va] < grp[vb]).mean(),
+        }
+        rows.append(row)
+
+    return pd.DataFrame(rows)
