@@ -63,19 +63,48 @@
 
 ## 输出文件
 
-所有输出位于 `output/` 目录：
+所有输出位于 `output/` 目录。
 
-| 文件 | 说明 |
-|------|------|
-| result_detail.csv | 每个客户 × 每个周期的指标对比明细 |
-| result_summary.csv | 按周期汇总的均值、胜率等统计 |
-| summary.md | Markdown 格式的对比摘要 |
+### result_detail.csv / result_detail_index.csv / result_detail_product.csv
 
-### 输出指标
+**逐客户、逐周期的对比明细。** 每行 = 一个客户 × 一个回测周期。
 
-**Per-client**: annualized_return, annualized_vol, sharpe_ratio, max_drawdown, delta_sigma
+- `result_detail_index.csv`：仅指数层（35 客户 × 5 周期 = 175 行）
+- `result_detail_product.csv`：仅产品层（35 客户 × 1 周期 = 35 行）
+- `result_detail.csv`：合并以上两者，额外增加 `layer` 列标识所属层级
 
-**Summary**: mean_return, mean_vol, mean_sharpe, mean_abs_delta_sigma, win_rate_return, win_rate_sharpe, win_rate_abs_delta_sigma
+每个策略的指标以后缀区分（如 `_3.0` / `_420_static`），含义如下：
+
+| 字段 | 含义 | 计算方式 |
+|------|------|---------|
+| `annualized_return` | 年化收益率 | `∏(1 + r_月)^(12/n) - 1`，将月度复利收益折算为年化 |
+| `annualized_vol` | 年化波动率 | `std(月收益, ddof=1) × √12`，衡量收益的离散程度 |
+| `sharpe_ratio` | 夏普比率 | `(年化收益 - 0.02) / 年化波动率`，无风险利率固定 2%，衡量单位风险的超额收益 |
+| `max_drawdown` | 最大回撤 | 累计净值序列中，从峰值到谷值的最大跌幅（负数），衡量极端下行风险 |
+| `delta_return` | 收益差 | 策略 A 年化收益 - 策略 B 年化收益，正值表示 A 更优 |
+| `delta_sharpe` | 夏普差 | 策略 A 夏普 - 策略 B 夏普 |
+| `delta_sigma` | 波动率差 | 策略 A 年化波动率 - 策略 B 年化波动率，正值表示 A 风险更高 |
+| `abs_delta_sigma` | 波动率差绝对值 | `|delta_sigma|`，用于汇总时衡量两策略的风险偏离程度 |
+
+### result_summary.csv
+
+**按周期汇总的统计摘要。** 每行 = 一个回测周期 × 一个层级（指数层 5 行 + 产品层 1 行 = 6 行）。
+
+| 字段 | 含义 | 说明 |
+|------|------|------|
+| `period` | 回测周期 | 1y / 3y / 5y / 10y / 20y |
+| `n_clients` | 客户数 | 该周期下有足够数据的客户数（通常 35） |
+| `mean_return_*` | 平均年化收益 | 35 个客户年化收益的均值 |
+| `mean_vol_*` | 平均年化波动率 | 35 个客户年化波动率的均值 |
+| `mean_sharpe_*` | 平均夏普比率 | 35 个客户夏普比率的均值 |
+| `mean_abs_delta_sigma` | 平均波动率偏离 | 35 个客户 `abs_delta_sigma` 的均值，反映两策略风险水平的整体差异 |
+| `win_rate_return` | 收益胜率 | 策略 A 年化收益 > 策略 B 的客户占比 |
+| `win_rate_sharpe` | 夏普胜率 | 策略 A 夏普 > 策略 B 的客户占比 |
+| `win_rate_abs_delta_sigma` | 低波动胜率 | 策略 A 波动率 < 策略 B 的客户占比（A 风险更低即为赢） |
+
+### summary.md
+
+与 `result_summary.csv` 内容一致的 Markdown 表格，按指数层 / 产品层分段展示，便于直接阅读或嵌入文档。
 
 ## 快速开始
 
