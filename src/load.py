@@ -14,6 +14,16 @@ def load_csv(name: str) -> pd.DataFrame:
     return pd.read_csv(path)
 
 
+def _melt_asset_returns(df: pd.DataFrame) -> pd.DataFrame:
+    """Convert wide-format asset_returns (month, CASH, BOND, EQUITY, ALT)
+    to long-format (date, asset_class, return) expected by calc.py."""
+    long = df.melt(id_vars="month", var_name="asset_class", value_name="return")
+    long = long.dropna(subset=["return"])
+    long["date"] = pd.to_datetime(long["month"]) + pd.offsets.MonthEnd(0)
+    long = long[["date", "asset_class", "return"]].sort_values(["date", "asset_class"])
+    return long.reset_index(drop=True)
+
+
 def load_all() -> dict[str, pd.DataFrame]:
     names = [
         "client_profiles.csv",
@@ -23,7 +33,9 @@ def load_all() -> dict[str, pd.DataFrame]:
         "risk_anchor.csv",
         "eligibility_matrix.csv",
     ]
-    return {n.replace(".csv", ""): load_csv(n) for n in names}
+    data = {n.replace(".csv", ""): load_csv(n) for n in names}
+    data["asset_returns"] = _melt_asset_returns(data["asset_returns"])
+    return data
 
 
 def validate_weights(weights: pd.DataFrame) -> None:
