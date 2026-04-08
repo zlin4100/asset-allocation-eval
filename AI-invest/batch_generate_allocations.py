@@ -34,15 +34,7 @@ ALLOWED_ASSETS = {
     5: ["CASH", "BOND", "EQUITY", "ALT"],
 }
 
-STAGE1_USER_PROMPT = """请基于 system prompt 中的客户画像与市场信息，生成一套完整的资产配置方案。
-
-要求：
-1. 先给出分析逻辑与配置理由
-2. 可以给出多个可选方案或情景方案
-3. 但必须明确给出"最终推荐资产配置方案"或含义等价的最终方案
-4. 最终方案中必须明确写出四大类资产权重：CASH、BOND、EQUITY、ALT
-5. 权重之和必须等于 100%
-6. 严格遵守客户 allowed_asset_classes 约束，不得出现不可投资产"""
+STAGE1_USER_PROMPT = "请结合我当前的情况和市场环境，给我一个专属的资产配置方案。"
 
 STAGE2_SYSTEM_PROMPT = "你是一个结构化数据提取助手。只输出 JSON，不输出任何解释。"
 
@@ -216,7 +208,7 @@ def run():
     print(f"Loaded {len(clients)} clients, template hash={template_hash}")
 
     # --- Stage 1 ---
-    stage1_path = os.path.join(OUTPUT_DIR, "stage1_raw_generations.jsonl")
+    stage1_path = os.path.join(OUTPUT_DIR, "stage1_raw_generations_v2.jsonl")
     stage1_results = []
 
     print("\n=== Stage 1: Generating allocation proposals ===")
@@ -261,7 +253,7 @@ def run():
     print(f"\nStage 1 saved to {stage1_path}")
 
     # --- Stage 2 ---
-    stage2_path = os.path.join(OUTPUT_DIR, "stage2_extracted_weights.jsonl")
+    stage2_path = os.path.join(OUTPUT_DIR, "stage2_extracted_weights_v2.jsonl")
     stage2_results = []
 
     print("\n=== Stage 2: Extracting weights ===")
@@ -307,7 +299,7 @@ def run():
     print(f"\nStage 2 saved to {stage2_path}")
 
     # --- Final CSV ---
-    csv_path = os.path.join(OUTPUT_DIR, "extracted_weights.csv")
+    csv_path = os.path.join(OUTPUT_DIR, "extracted_weights_v2.csv")
     fieldnames = ["id", "lifecycle", "risk_level", "cash_pct", "bond_pct",
                   "equity_pct", "commodity_pct", "CASH", "BOND", "EQUITY", "ALT",
                   "weight_sum", "parse_status"]
