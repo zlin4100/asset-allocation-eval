@@ -36,36 +36,41 @@ ALLOWED_ASSETS = {
 
 STAGE1_USER_PROMPT = "请结合我当前的情况和市场环境，给我一个专属的资产配置方案。"
 
-STAGE2_SYSTEM_PROMPT = "你是一个结构化数据提取助手。只输出 JSON，不输出任何解释。"
+STAGE2_SYSTEM_PROMPT = """你是一个结构化数据提取助手。
+只输出一个裸 JSON 对象，不输出任何解释、markdown 或代码块。
+
+要求：
+1. 始终输出四个键：CASH, BOND, EQUITY, ALT
+2. 每个值必须是 0 到 100 之间的数字，表示百分比
+3. 不要输出 0.7，必须输出 70
+4. 不要输出 "70%"，必须输出 70
+5. 若无法确定，则输出 null"""
 
 STAGE2_USER_TEMPLATE = """请从下面这段资产配置方案中，提取"最终推荐资产配置方案"的四大类资产权重。
 
 注意：
 1. 文中可能有多个备选方案、情景方案或中间方案
 2. 你只能提取最终方案
-3. 优先识别带有以下字样的方案：
+3. 以下表达都可视为最终方案锚点：
    - 最终推荐资产配置方案
+   - 最终推荐资产配置权重
    - 最终方案
    - 最终推荐
    - 推荐方案
    - 综合建议后的最终配置
    - 落地配置建议
+   - 推荐采用某方案
+   - 优先采纳某方案
+   - 主推方案
+   - 默认策略
 4. 如果没有明确标题，请提取全文结论部分最明确的一组四大类权重
-5. 不要提取中间推演方案
+5. 未配置或明确不可投的资产输出 0
 6. 严格遵守原文，不要脑补原文没有的信息
 
-仅输出 JSON，不要输出任何解释：
+只输出裸 JSON，例如：
+{{"CASH":70,"BOND":30,"EQUITY":0,"ALT":0}}
 
-```json
-{{
-  "CASH": null,
-  "BOND": null,
-  "EQUITY": null,
-  "ALT": null
-}}
-```
-
-待提取正文：
+文本如下：
 {raw_output}"""
 
 
@@ -147,47 +152,114 @@ class APIClient:
         raise RuntimeError(f"API failed after {MAX_RETRIES} retries: {last_error}")
 
 
+def strip_code_fence(text: str) -> str:
+    """Remove ```json ... ``` or ``` ... ``` code fences, return inner content."""
+    text = text.strip()
+    # Match ```json\n...\n``` or ```\n...\n```
+    m = re.search(r'```(?:json)?\s*\n?(.*?)\n?\s*```', text, re.DOTALL)
+    if m:
+        return m.group(1).strip()
+    return text
+
+
+def extract_first_json_object(text: str):
+    """Extract the first { ... } block from text. Handles nested braces."""
+    start = text.find('{')
+    if start == -1:
+        return None
+    depth = 0
+    for i in range(start, len(text)):
+        if text[i] == '{':
+            depth += 1
+        elif text[i] == '}':
+            depth -= 1
+            if depth == 0:
+                return text[start:i + 1]
+    return None
+
+
+def normalize_weight_value(val):
+    """Convert a single weight value to float. Handles '70%', '70', 0.7, 70."""
+    if val is None:
+        return None
+    if isinstance(val, (int, float)):
+        return float(val)
+    if isinstance(val, str):
+        val = val.strip().rstrip('%').strip()
+        try:
+            return float(val)
+        except ValueError:
+            return None
+    return None
+
+
+def normalize_allocation_dict(data: dict) -> dict:
+    """Normalize {CASH, BOND, EQUITY, ALT} values: handle %, 0~1 decimals, strings."""
+    keys = ["CASH", "BOND", "EQUITY", "ALT"]
+    vals = {}
+    for k in keys:
+        vals[k] = normalize_weight_value(data.get(k))
+
+    # Check if values look like 0~1 ratios (sum ≈ 1) and scale to 100
+    parseable = [v for v in vals.values() if v is not None]
+    if len(parseable) >= 2:
+        s = sum(parseable)
+        if 0.99 <= s <= 1.01:
+            # All values are 0~1 ratios, scale to percentages
+            for k in keys:
+                if vals[k] is not None:
+                    vals[k] = round(vals[k] * 100, 2)
+
+    # Round to 2 decimal places
+    for k in keys:
+        if vals[k] is not None:
+            vals[k] = round(vals[k], 2)
+
+    return vals
+
+
 def parse_weights(stage2_output: str) -> dict:
     """Parse CASH/BOND/EQUITY/ALT from stage2 output. Returns dict with weights + parse_status."""
     result = {"CASH": None, "BOND": None, "EQUITY": None, "ALT": None,
               "weight_sum": None, "parse_status": "failed"}
 
-    # Try direct JSON parse
     text = stage2_output.strip()
-    parsed = None
-    try:
-        parsed = json.loads(text)
-    except json.JSONDecodeError:
-        # Try extracting JSON block from markdown code fence or raw braces
-        m = re.search(r'```(?:json)?\s*(\{.*?\})\s*```', text, re.DOTALL)
-        if m:
-            try:
-                parsed = json.loads(m.group(1))
-            except json.JSONDecodeError:
-                pass
-        if not parsed:
-            m = re.search(r'\{[^{}]*"CASH"[^{}]*\}', text, re.DOTALL)
-            if m:
-                try:
-                    parsed = json.loads(m.group(0))
-                except json.JSONDecodeError:
-                    pass
-
-    if not parsed:
+    if not text:
         return result
 
-    for key in ["CASH", "BOND", "EQUITY", "ALT"]:
-        val = parsed.get(key)
-        if val is not None:
+    # Step 1: strip code fence
+    cleaned = strip_code_fence(text)
+
+    # Step 2: try parsing cleaned text as JSON
+    parsed = None
+    try:
+        parsed = json.loads(cleaned)
+    except json.JSONDecodeError:
+        pass
+
+    # Step 3: fallback — extract first JSON object from raw text
+    if not parsed:
+        json_str = extract_first_json_object(text)
+        if json_str:
             try:
-                result[key] = float(val)
-            except (ValueError, TypeError):
+                parsed = json.loads(json_str)
+            except json.JSONDecodeError:
                 pass
 
+    if not parsed or not isinstance(parsed, dict):
+        return result
+
+    # Step 4: normalize values (handle %, 0~1, strings)
+    normalized = normalize_allocation_dict(parsed)
+
+    for k in ["CASH", "BOND", "EQUITY", "ALT"]:
+        result[k] = normalized[k]
+
+    # Step 5: compute sum and determine status
     vals = [result[k] for k in ["CASH", "BOND", "EQUITY", "ALT"] if result[k] is not None]
     if len(vals) == 4:
-        result["weight_sum"] = round(sum(vals), 4)
-        if abs(result["weight_sum"] - 100) < 0.01:
+        result["weight_sum"] = round(sum(vals), 2)
+        if 99.5 <= result["weight_sum"] <= 100.5:
             result["parse_status"] = "success"
         else:
             result["parse_status"] = "sum_not_100"
