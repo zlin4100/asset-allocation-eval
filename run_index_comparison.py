@@ -37,6 +37,7 @@ def run():
     weights = load_csv("strategy_weights.csv")
     asset_ret = _melt_asset_returns(load_csv("asset_returns.csv"))
     eligibility = load_csv("eligibility_matrix.csv")
+    risk_anchor = load_csv("risk_anchor.csv")
 
     # Only validate index-layer strategies
     idx_weights = weights[weights["portfolio_type"].isin(["3.0", "420_static"])].copy()
@@ -53,7 +54,7 @@ def run():
     metrics_30 = compute_all_metrics(port_30, INDEX_PERIODS)
     metrics_420 = compute_all_metrics(port_420, INDEX_PERIODS)
 
-    detail = compare_pair(metrics_30, metrics_420, "3.0", "420_static")
+    detail = compare_pair(metrics_30, metrics_420, "3.0", "420_static", risk_anchor)
     summary = summarize(detail, "3.0", "420_static")
 
     # Output

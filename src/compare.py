@@ -9,10 +9,11 @@ def compare_pair(
     metrics_b: pd.DataFrame,
     label_a: str,
     label_b: str,
+    risk_anchor: pd.DataFrame = None,
 ) -> pd.DataFrame:
     """
     Merge metrics for two strategies on (profile_id, period) and compute deltas.
-    Returns detail DataFrame with per-client comparison.
+    If risk_anchor is provided, computes |vol - σ_mid| per strategy for risk-fit comparison.
     """
     merged = metrics_a.merge(
         metrics_b,
@@ -30,6 +31,16 @@ def compare_pair(
     merged["delta_sigma"] = merged[va] - merged[vb]  # same as delta_vol
     merged["abs_delta_sigma"] = merged["delta_sigma"].abs()
 
+    # Risk-fit: |vol - σ_mid| per strategy (Δσ from 风险锚体系)
+    if risk_anchor is not None:
+        merged = merged.merge(
+            risk_anchor[["profile_id", "sigma_mid"]],
+            on="profile_id",
+            how="left",
+        )
+        merged[f"abs_delta_sigma_{label_a}"] = (merged[va] - merged["sigma_mid"]).abs()
+        merged[f"abs_delta_sigma_{label_b}"] = (merged[vb] - merged["sigma_mid"]).abs()
+
     return merged
 
 
@@ -38,6 +49,8 @@ def summarize(detail: pd.DataFrame, label_a: str, label_b: str) -> pd.DataFrame:
     ra, rb = f"annualized_return_{label_a}", f"annualized_return_{label_b}"
     va, vb = f"annualized_vol_{label_a}", f"annualized_vol_{label_b}"
     sa, sb = f"sharpe_ratio_{label_a}", f"sharpe_ratio_{label_b}"
+
+    has_anchor = f"abs_delta_sigma_{label_a}" in detail.columns
 
     rows = []
     for period, grp in detail.groupby("period"):
@@ -54,8 +67,16 @@ def summarize(detail: pd.DataFrame, label_a: str, label_b: str) -> pd.DataFrame:
             "mean_abs_delta_sigma": grp["abs_delta_sigma"].mean(),
             "win_rate_return": (grp["delta_return"] > 0).mean(),
             "win_rate_sharpe": (grp["delta_sharpe"] > 0).mean(),
-            "win_rate_abs_delta_sigma": (grp[va] < grp[vb]).mean(),
         }
+        if has_anchor:
+            ads_a = f"abs_delta_sigma_{label_a}"
+            ads_b = f"abs_delta_sigma_{label_b}"
+            # A wins when |vol_A - σ_mid| < |vol_B - σ_mid| (closer to risk target)
+            row["win_rate_abs_delta_sigma"] = (grp[ads_a] < grp[ads_b]).mean()
+            row[f"mean_abs_delta_sigma_{label_a}"] = grp[ads_a].mean()
+            row[f"mean_abs_delta_sigma_{label_b}"] = grp[ads_b].mean()
+        else:
+            row["win_rate_abs_delta_sigma"] = (grp[va] < grp[vb]).mean()
         rows.append(row)
 
     return pd.DataFrame(rows)
