@@ -6,7 +6,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 Offline evaluation framework comparing smart portfolio strategies (智能投顾 3.0 vs 420). Two comparison layers:
 - **Index layer**: 3.0 vs 420_static — asset class weights × index returns
-- **Product layer**: 3.0_mapped_product vs 420_online — product weights × product returns
+- **Product layer**: 3.0_mapped_product vs 420_online — product weights × product returns ⚠️ **暂停** — 依赖 `product_returns.csv`（真实产品净值）和 product_code 粒度的权重，数据尚未就绪
 
 Both layers use buy-and-hold (static weights, no rebalancing) across 35 client segments (C1–C5 × S1–S7).
 
