@@ -1,0 +1,26 @@
+{
+    "data": {
+      "prdName": "国泰黄金ETF联接A",
+      "totalNum": 2432,
+      "list": [
+        {
+          "date": "20260408",
+          "avgreturnDay": "3.07",
+          "navAccumulated": "3.8354",
+          "navAdjusted": "3.8354",
+          "navUnit": "3.8354",
+          "sevenIncomeRate": 0
+        },
+        {
+          "date": "20260407",
+          "avgreturnDay": "-0.60",
+          "navAccumulated": "3.7213",
+          "navAdjusted": "3.7213",
+          "navUnit": "3.7213",
+          "sevenIncomeRate": 0
+        }
+      ]
+    },
+    "responseCode": "000000",
+    "responseMsg": "成功"
+  }
