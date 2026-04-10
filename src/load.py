@@ -25,13 +25,13 @@ def _melt_asset_returns(df: pd.DataFrame) -> pd.DataFrame:
 
 
 def _melt_product_returns(df: pd.DataFrame) -> pd.DataFrame:
-    """Convert wide-format product_returns (date, product_code, CASH, BOND, EQUITY, ALT)
-    to long-format (date, product_code, return) expected by calc.py."""
-    asset_cols = [c for c in ["CASH", "BOND", "EQUITY", "ALT"] if c in df.columns]
-    long = df.melt(id_vars=["date", "product_code"], value_vars=asset_cols, value_name="return")
-    long = long.dropna(subset=["return"])[["date", "product_code", "return"]]
+    """Convert wide-format product_returns (date, CASH, BOND, EQUITY, ALT)
+    to long-format (date, asset_class, return) expected by calc.py."""
+    long = df.melt(id_vars="date", var_name="asset_class", value_name="return")
+    long = long.dropna(subset=["return"])
     long["date"] = pd.to_datetime(long["date"]) + pd.offsets.MonthEnd(0)
-    return long.sort_values(["date", "product_code"]).reset_index(drop=True)
+    long = long[["date", "asset_class", "return"]].sort_values(["date", "asset_class"])
+    return long.reset_index(drop=True)
 
 
 def load_all() -> dict[str, pd.DataFrame]:

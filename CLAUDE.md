@@ -28,7 +28,7 @@ Data flows linearly: `data/*.csv → load → calc → compare → report → ou
 
 - **main.py** — orchestrates the pipeline: load data, compute portfolio returns for each layer, calculate metrics, compare strategy pairs, save results
 - **src/load.py** — reads 6 input CSVs, validates weight sums to 1 and eligibility constraints
-- **src/calc.py** — `portfolio_monthly_returns()` joins weights with returns via `asset_class` (index) or `product_code` (product); `compute_all_metrics()` computes annualized return/vol/sharpe/max drawdown per profile per lookback period
+- **src/calc.py** — `portfolio_monthly_returns()` joins weights with returns via `asset_class` (both index and product layers); `compute_all_metrics()` computes annualized return/vol/sharpe/max drawdown per profile per lookback period
 - **src/compare.py** — `compare_pair()` merges two strategies on (profile_id, period), computes deltas; `summarize()` aggregates means and win rates
 - **src/report.py** — saves CSVs and markdown summary to `output/`
 - **build_asset_returns.py** — builds `data/asset_returns.csv` (wide format: month, CASH, BOND, EQUITY, ALT) from `data/建模月频序列.csv`; `src/load.py` melts it to long format on load
@@ -37,7 +37,7 @@ Data flows linearly: `data/*.csv → load → calc → compare → report → ou
 - **run_index_comparison.py** — runs index layer comparison only (3.0 vs 420_static), outputs to `output/index_3.0_vs_420/`
 - **generate_mock.py** — standalone script producing all 6 input CSVs with realistic distributions (WARNING: overwrites real data)
 
-Key join: index layer joins on `asset_class`, product layer joins on `product_code`. The `join_col` parameter in `portfolio_monthly_returns()` controls this.
+Key join: both layers join on `asset_class`. `product_returns.csv` is wide format (date, CASH, BOND, EQUITY, ALT) with values averaged across products per asset class per month; `src/load.py` melts it to long format on load.
 
 ## Key Domain Concepts
 
